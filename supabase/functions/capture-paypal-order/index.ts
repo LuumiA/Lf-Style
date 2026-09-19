@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getPaypalAccessToken } from "../_shared/paypal.ts";
+import { sendOrderConfirmationEmail } from "../_shared/email.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -41,7 +42,7 @@ Deno.serve(async (request) => {
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
     const { data: order } = await adminClient
       .from("orders")
-      .select("id, user_id, status")
+      .select("id, user_id, status, total")
       .eq("paypal_order_id", paypalOrderId)
       .maybeSingle();
     if (!order || order.user_id !== userData.user.id)
@@ -74,6 +75,24 @@ Deno.serve(async (request) => {
       console.error("ORDER_STATUS_UPDATE_FAILED", updateError);
       return json({ error: "ORDER_STATUS_UPDATE_FAILED" }, 500);
     }
+
+    if (userData.user.email) {
+      const { data: orderItems } = await adminClient
+        .from("order_items")
+        .select("product_name, unit_price, quantity")
+        .eq("order_id", order.id);
+      await sendOrderConfirmationEmail({
+        to: userData.user.email,
+        orderId: order.id,
+        total: Number(order.total),
+        items: (orderItems ?? []).map((item) => ({
+          name: item.product_name,
+          quantity: item.quantity,
+          unitPrice: Number(item.unit_price),
+        })),
+      });
+    }
+
     return json({ status: "COMPLETED" });
   } catch {
     return json({ error: "CAPTURE_FAILED" }, 500);

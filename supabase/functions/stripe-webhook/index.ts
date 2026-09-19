@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { sendOrderConfirmationEmail } from "../_shared/email.ts";
 
 const encoder = new TextEncoder();
 const hex = (bytes: ArrayBuffer) =>
@@ -60,6 +61,31 @@ Deno.serve(async (request) => {
         .update({ status: "paid" })
         .eq("id", orderId);
       if (updateError) console.error("ORDER_STATUS_UPDATE_FAILED", updateError);
+
+      const email =
+        event.data.object.customer_details?.email ??
+        event.data.object.customer_email;
+      if (!updateError && email) {
+        const { data: order } = await supabase
+          .from("orders")
+          .select("total")
+          .eq("id", orderId)
+          .maybeSingle();
+        const { data: orderItems } = await supabase
+          .from("order_items")
+          .select("product_name, unit_price, quantity")
+          .eq("order_id", orderId);
+        await sendOrderConfirmationEmail({
+          to: email,
+          orderId,
+          total: Number(order?.total ?? 0),
+          items: (orderItems ?? []).map((item) => ({
+            name: item.product_name,
+            quantity: item.quantity,
+            unitPrice: Number(item.unit_price),
+          })),
+        });
+      }
     }
   }
   return new Response(JSON.stringify({ received: true }), {

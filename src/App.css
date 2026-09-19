@@ -838,6 +838,24 @@ h2 {
   line-height: 1.7;
   margin-bottom: 30px;
 }
+.order-success {
+  text-align: center;
+}
+.order-success-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 20px;
+  border-radius: 50%;
+  background: #242321;
+  color: #fff;
+  font-size: 24px;
+}
+.order-success .eyebrow {
+  text-align: center;
+}
 .order-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);

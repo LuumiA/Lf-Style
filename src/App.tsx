@@ -93,6 +93,7 @@ function App() {
     | "account"
     | "admin"
     | "orders"
+    | "order-success"
     | null
   >(null);
   const [accountName, setAccountName] = useState("");
@@ -209,7 +210,6 @@ function App() {
     if (params.get("paypal") === "return" && paypalToken) {
       if (!userId) return;
       setOrderSaved(false);
-      setIsCartOpen(true);
       supabase.functions
         .invoke("capture-paypal-order", {
           body: { paypal_order_id: paypalToken },
@@ -217,28 +217,29 @@ function App() {
         .then(({ data, error }) => {
           if (error || data?.status !== "COMPLETED") {
             setOrderMessage("Le paiement PayPal n'a pas pu être confirmé.");
+            setIsCartOpen(true);
             return;
           }
           localStorage.removeItem(storageKey);
           setCart([]);
-          setOrderMessage("Paiement confirmé, merci pour votre commande !");
           setOrdersRefreshKey((key) => key + 1);
+          setModal("order-success");
         });
       cleanUrl(["paypal", "token", "PayerID", "order_id"]);
       return;
     }
 
     if (payment === "success" || payment === "cancelled") {
+      setOrderSaved(false);
       if (payment === "success") {
         localStorage.removeItem(storageKey);
         setCart([]);
-        setOrderMessage("Paiement confirmé, merci pour votre commande !");
         setOrdersRefreshKey((key) => key + 1);
+        setModal("order-success");
       } else {
         setOrderMessage("Paiement annulé. Votre panier a été conservé.");
+        setIsCartOpen(true);
       }
-      setOrderSaved(false);
-      setIsCartOpen(true);
       if (userId) cleanUrl(["payment", "session_id"]);
       return;
     }
@@ -1269,7 +1270,32 @@ function App() {
             <button className="close-button" onClick={() => setModal(null)}>
               ×
             </button>
-            {modal === "login" ? (
+            {modal === "order-success" ? (
+              <div className="order-success">
+                <span className="order-success-icon">✓</span>
+                <p className="eyebrow">Commande confirmée</p>
+                <h2>Merci pour votre achat !</h2>
+                <p className="modal-intro">
+                  Votre paiement a bien été reçu. Un email de confirmation
+                  vous a été envoyé.
+                </p>
+                <button
+                  className="button button-dark full-button"
+                  onClick={() => setModal(null)}
+                >
+                  Continuer mes achats <span>↗</span>
+                </button>
+                <p className="form-foot">
+                  <button
+                    onClick={() => {
+                      setModal("account");
+                    }}
+                  >
+                    Voir mes commandes
+                  </button>
+                </p>
+              </div>
+            ) : modal === "login" ? (
               <>
                 <p className="eyebrow">Espace personnel</p>
                 <h2>Ravi de vous revoir.</h2>
