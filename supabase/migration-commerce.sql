@@ -63,10 +63,9 @@ declare
   current_order public.orders%rowtype;
   item record;
 begin
+  if not public.is_admin() then raise exception 'ADMIN_REQUIRED'; end if;
   select * into current_order from public.orders where id = target_order_id for update;
-  if not public.is_admin() and current_order.user_id <> auth.uid() then raise exception 'ADMIN_REQUIRED'; end if;
   if not found or current_order.status in ('cancelled', 'completed') then raise exception 'ORDER_CANNOT_BE_CANCELLED'; end if;
-  if not public.is_admin() and current_order.status <> 'pending' then raise exception 'ORDER_CANNOT_BE_CANCELLED'; end if;
   for item in select product_id, quantity from public.order_items where order_id = target_order_id loop
     update public.products set stock = stock + item.quantity where id = item.product_id;
   end loop;

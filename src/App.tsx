@@ -499,23 +499,32 @@ function App() {
     size?: string,
     color?: string,
   ) => {
-    if (product.stock < quantity) {
-      setCartNotice("Ce produit n'est plus disponible dans cette quantité.");
-      return;
+    const alreadyInCart = cart
+      .filter((item) => item.product.id === product.id)
+      .reduce((total, item) => total + item.quantity, 0);
+    if (alreadyInCart + quantity > product.stock) {
+      setCartNotice(
+        `Stock disponible : ${Math.max(0, product.stock - alreadyInCart)} article${product.stock - alreadyInCart > 1 ? "s" : ""}.`,
+      );
+      window.setTimeout(() => setCartNotice(""), 2800);
+      return false;
     }
     setCart((current) => {
       const existing = current.find(
         (item) =>
           item.product.id === product.id &&
-          item.size === size &&
-          item.color === color,
+          ((item.size === size && item.color === color) ||
+            (!item.size && !item.color) ||
+            (!size && !color)),
       );
       if (existing)
         return current.map((item) =>
           item === existing
             ? {
                 ...item,
-                quantity: Math.min(item.quantity + quantity, product.stock),
+                quantity: item.quantity + quantity,
+                size: size ?? item.size,
+                color: color ?? item.color,
               }
             : item,
         );
@@ -525,6 +534,7 @@ function App() {
     setOrderMessage("");
     setCartNotice(`${product.name} a été ajouté au panier.`);
     window.setTimeout(() => setCartNotice(""), 2800);
+    return true;
   };
   const removeFromCart = (index: number) => {
     setOrderSaved(false);
@@ -544,6 +554,14 @@ function App() {
     )
   );
   const cartCount = cart.reduce((total, item) => total + item.quantity, 0);
+  const selectedProductCartQuantity = selectedProduct
+    ? cart
+        .filter((item) => item.product.id === selectedProduct.id)
+        .reduce((total, item) => total + item.quantity, 0)
+    : 0;
+  const selectedProductAvailableStock = selectedProduct
+    ? Math.max(0, selectedProduct.stock - selectedProductCartQuantity)
+    : 0;
   const cartTotal = cart.reduce(
     (total, item) => total + item.product.price * item.quantity,
     0,
@@ -1289,14 +1307,16 @@ function App() {
                   onSubmit={(event) => {
                     event.preventDefault();
                     const form = new FormData(event.currentTarget);
-                    addToCart(
+                    const added = addToCart(
                       selectedProduct,
                       Number(form.get("quantity")),
                       String(form.get("size") || "") || undefined,
                       String(form.get("color") || "") || undefined,
                     );
-                    setModal(null);
-                    setIsCartOpen(true);
+                    if (added) {
+                      setModal(null);
+                      setIsCartOpen(true);
+                    }
                   }}
                 >
                   {selectedProduct.sizes.length > 0 && (
@@ -1331,20 +1351,20 @@ function App() {
                       name="quantity"
                       type="number"
                       min="1"
-                      max={selectedProduct.stock}
+                      max={selectedProductAvailableStock}
                       defaultValue="1"
                       required
                     />
                   </label>
                   <p className="stock-note">
-                    {selectedProduct.stock} disponible
-                    {selectedProduct.stock > 1 ? "s" : ""}
+                    {selectedProductAvailableStock} disponible
+                    {selectedProductAvailableStock > 1 ? "s" : ""}
                   </p>
                   <button
                     className="button button-dark full-button"
-                    disabled={selectedProduct.stock === 0}
+                    disabled={selectedProductAvailableStock === 0}
                   >
-                    {selectedProduct.stock === 0
+                    {selectedProductAvailableStock === 0
                       ? "Rupture de stock"
                       : "Ajouter au panier"}{" "}
                     <span>+</span>
