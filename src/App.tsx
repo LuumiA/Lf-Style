@@ -105,6 +105,7 @@ function App() {
   const [cartNotice, setCartNotice] = useState("");
   const [orderSaved, setOrderSaved] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
   const [catalog, setCatalog] = useState<Product[]>([]);
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
@@ -221,6 +222,7 @@ function App() {
           localStorage.removeItem(storageKey);
           setCart([]);
           setOrderMessage("Paiement confirmé, merci pour votre commande !");
+          setOrdersRefreshKey((key) => key + 1);
         });
       cleanUrl(["paypal", "token", "PayerID", "order_id"]);
       return;
@@ -231,6 +233,7 @@ function App() {
         localStorage.removeItem(storageKey);
         setCart([]);
         setOrderMessage("Paiement confirmé, merci pour votre commande !");
+        setOrdersRefreshKey((key) => key + 1);
       } else {
         setOrderMessage("Paiement annulé. Votre panier a été conservé.");
       }
@@ -280,7 +283,7 @@ function App() {
         );
     };
     void loadOrders();
-  }, [userId]);
+  }, [userId, ordersRefreshKey]);
 
   const signIn = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();

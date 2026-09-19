@@ -55,10 +55,11 @@ Deno.serve(async (request) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
-      await supabase
+      const { error: updateError } = await supabase
         .from("orders")
         .update({ status: "paid" })
         .eq("id", orderId);
+      if (updateError) console.error("ORDER_STATUS_UPDATE_FAILED", updateError);
     }
   }
   return new Response(JSON.stringify({ received: true }), {

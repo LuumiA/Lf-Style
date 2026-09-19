@@ -66,10 +66,14 @@ Deno.serve(async (request) => {
       return json({ error: "PAYPAL_CAPTURE_FAILED" }, 502);
     }
 
-    await adminClient
+    const { error: updateError } = await adminClient
       .from("orders")
       .update({ status: "paid" })
       .eq("id", order.id);
+    if (updateError) {
+      console.error("ORDER_STATUS_UPDATE_FAILED", updateError);
+      return json({ error: "ORDER_STATUS_UPDATE_FAILED" }, 500);
+    }
     return json({ status: "COMPLETED" });
   } catch {
     return json({ error: "CAPTURE_FAILED" }, 500);
