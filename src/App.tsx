@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBasketShopping } from "@fortawesome/free-solid-svg-icons";
 import "./App.css";
-import { supabase } from "./lib/supabase";
+import { hasSupabaseConfig, supabase } from "./lib/supabase";
 
 type Product = {
   id: string;
@@ -682,6 +682,21 @@ function App() {
     setOrders((current) => current.filter((order) => order.id !== orderId));
     setAdminMessage("Commande supprimée.");
   };
+
+  if (!hasSupabaseConfig) {
+    return (
+      <main className="config-error">
+        <p className="eyebrow">Configuration nécessaire</p>
+        <h1>LF-Style</h1>
+        <p>
+          Les variables Supabase ne sont pas disponibles sur ce déploiement.
+          Ajoutez <strong>VITE_SUPABASE_URL</strong> et{" "}
+          <strong>VITE_SUPABASE_PUBLISHABLE_KEY</strong> dans Vercel, puis
+          redéployez le projet.
+        </p>
+      </main>
+    );
+  }
 
   return (
     <div className="site-shell">
