@@ -786,6 +786,15 @@ h2 {
   cursor: not-allowed;
   background: #8f8a82;
 }
+.button-paypal {
+  background: #ffc439;
+  color: #1a1a1a;
+  margin-top: 10px;
+}
+.button-paypal:disabled {
+  background: #e8dcb5;
+  color: #8f8a82;
+}
 .payment-note {
   text-align: center;
   margin: 12px 0 0;

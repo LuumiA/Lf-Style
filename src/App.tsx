@@ -192,6 +192,54 @@ function App() {
 
   useEffect(() => {
     const storageKey = `lf-style-cart-${userId ?? "guest"}`;
+    const params = new URLSearchParams(window.location.search);
+    const payment = params.get("payment");
+    const paypalToken = params.get("token");
+    const cleanUrl = (keys: string[]) => {
+      keys.forEach((key) => params.delete(key));
+      const query = params.toString();
+      window.history.replaceState(
+        {},
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}`,
+      );
+    };
+
+    if (params.get("paypal") === "return" && paypalToken) {
+      if (!userId) return;
+      setOrderSaved(false);
+      setIsCartOpen(true);
+      supabase.functions
+        .invoke("capture-paypal-order", {
+          body: { paypal_order_id: paypalToken },
+        })
+        .then(({ data, error }) => {
+          if (error || data?.status !== "COMPLETED") {
+            setOrderMessage("Le paiement PayPal n'a pas pu être confirmé.");
+            return;
+          }
+          localStorage.removeItem(storageKey);
+          setCart([]);
+          setOrderMessage("Paiement confirmé, merci pour votre commande !");
+        });
+      cleanUrl(["paypal", "token", "PayerID", "order_id"]);
+      return;
+    }
+
+    if (payment === "success" || payment === "cancelled") {
+      if (payment === "success") {
+        localStorage.removeItem(storageKey);
+        setCart([]);
+        setOrderMessage("Paiement confirmé, merci pour votre commande !");
+      } else {
+        setOrderMessage("Paiement annulé. Votre panier a été conservé.");
+      }
+      setOrderSaved(false);
+      setIsCartOpen(true);
+      if (userId) cleanUrl(["payment", "session_id"]);
+      return;
+    }
+
     const storedCart = localStorage.getItem(storageKey);
     setCart(storedCart ? (JSON.parse(storedCart) as CartItem[]) : []);
   }, [userId]);
@@ -567,60 +615,68 @@ function App() {
     0,
   );
 
-  const createOrder = async () => {
+  const startCheckout = async () => {
     if (!userId) {
       setModal("login");
       return;
     }
-    const { data: orderId, error } = await supabase.rpc("create_order", {
-      order_items: cart.map((item) => ({
-        product_id: item.product.id,
-        quantity: item.quantity,
-        size: item.size,
-        color: item.color,
-      })),
-    });
-    if (error) {
-      setOrderMessage(
-        error.message.includes("INSUFFICIENT_STOCK")
-          ? "Stock insuffisant pour un article du panier."
-          : "Impossible de créer la commande.",
-      );
-      return;
-    }
-    setOrderSaved(true);
-    setOrderMessage(
-      "Commande enregistrée. Le panier reste conservé jusqu'au paiement.",
-    );
-    if (orderId) {
-      setOrders((current) => [
-        {
-          id: orderId,
-          status: "pending",
-          total: cartTotal,
-          createdAt: new Date().toISOString(),
+    setOrderMessage("");
+    const { data, error } = await supabase.functions.invoke(
+      "create-checkout-session",
+      {
+        body: {
           items: cart.map((item) => ({
-            productId: item.product.id,
-            productName: item.product.name,
-            unitPrice: item.product.price,
+            product_id: item.product.id,
             quantity: item.quantity,
             size: item.size,
             color: item.color,
           })),
         },
-        ...current,
-      ]);
-    }
-    setCatalog((current) =>
-      current.map((product) => {
-        const item = cart.find(
-          (cartItem) => cartItem.product.id === product.id,
-        );
-        return item
-          ? { ...product, stock: product.stock - item.quantity }
-          : product;
-      }),
+      },
     );
+    if (error || !data?.url) {
+      const message = data?.error ?? error?.message ?? "CHECKOUT_FAILED";
+      setOrderMessage(
+        message.includes("INSUFFICIENT_STOCK")
+          ? "Stock insuffisant pour un article du panier."
+          : "Impossible d'ouvrir le paiement. Vérifiez la configuration Stripe.",
+      );
+      return;
+    }
+    setOrderSaved(true);
+    window.location.assign(data.url);
+  };
+
+  const startPaypalCheckout = async () => {
+    if (!userId) {
+      setModal("login");
+      return;
+    }
+    setOrderMessage("");
+    const { data, error } = await supabase.functions.invoke(
+      "create-paypal-order",
+      {
+        body: {
+          items: cart.map((item) => ({
+            product_id: item.product.id,
+            quantity: item.quantity,
+            size: item.size,
+            color: item.color,
+          })),
+        },
+      },
+    );
+    if (error || !data?.url) {
+      const message = data?.error ?? error?.message ?? "CHECKOUT_FAILED";
+      setOrderMessage(
+        message.includes("INSUFFICIENT_STOCK")
+          ? "Stock insuffisant pour un article du panier."
+          : "Impossible d'ouvrir le paiement. Vérifiez la configuration PayPal.",
+      );
+      return;
+    }
+    setOrderSaved(true);
+    window.location.assign(data.url);
   };
 
   const updateOrderStatus = async (orderId: string, status: string) => {
@@ -1174,18 +1230,28 @@ function App() {
                   <button
                     className="button button-dark checkout-button"
                     disabled={orderSaved}
-                    onClick={() => void createOrder()}
+                    onClick={() => void startCheckout()}
                   >
                     {orderSaved
-                      ? "Commande enregistrée"
-                      : "Enregistrer la commande"}{" "}
+                      ? "Redirection vers le paiement"
+                      : "Payer par carte"}{" "}
+                    <span>↗</span>
+                  </button>
+                  <button
+                    className="button button-paypal checkout-button"
+                    disabled={orderSaved}
+                    onClick={() => void startPaypalCheckout()}
+                  >
+                    {orderSaved
+                      ? "Redirection vers le paiement"
+                      : "Payer avec PayPal"}{" "}
                     <span>↗</span>
                   </button>
                   {orderMessage && (
                     <p className="payment-note">{orderMessage}</p>
                   )}
                   <p className="payment-note">
-                    Paiement sécurisé par carte ou PayPal
+                    Paiement sécurisé par carte bancaire ou PayPal
                   </p>
                 </div>
               </>

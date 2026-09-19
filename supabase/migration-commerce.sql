@@ -15,6 +15,9 @@ create table if not exists public.orders (
   created_at timestamptz not null default now()
 );
 
+alter table public.orders add column if not exists stripe_session_id text unique;
+alter table public.orders add column if not exists paypal_order_id text unique;
+
 create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
   order_id uuid references public.orders on delete cascade not null,
