@@ -39,6 +39,30 @@ Deno.serve(async (request) => {
     const items = Array.isArray(body.items) ? body.items : [];
     if (!items.length) return json({ error: "EMPTY_CART" }, 400);
 
+    const delivery = body.delivery ?? {};
+    if (
+      !delivery.fullName ||
+      !delivery.phone ||
+      !delivery.line1 ||
+      !delivery.postalCode ||
+      !delivery.city
+    ) {
+      return json({ error: "MISSING_DELIVERY_INFO" }, 400);
+    }
+    const shipping = {
+      name: delivery.fullName,
+      line1:
+        delivery.method === "relay"
+          ? `${delivery.relayName ?? ""} - ${delivery.line1}`.trim()
+          : delivery.line1,
+      line2: delivery.line2 ?? null,
+      city: delivery.city,
+      postalCode: delivery.postalCode,
+      country: delivery.country ?? null,
+      phone: delivery.phone,
+    };
+    const billing = body.billing ?? null;
+
     const { data: orderId, error: orderError } = await userClient.rpc(
       "create_order",
       {
@@ -80,11 +104,6 @@ Deno.serve(async (request) => {
     params.set("cancel_url", `${siteUrl}/?payment=cancelled`);
     params.set("customer_email", userData.user.email ?? "");
     params.set("metadata[order_id]", orderId);
-    params.set("shipping_address_collection[allowed_countries][0]", "FR");
-    params.set("shipping_address_collection[allowed_countries][1]", "BE");
-    params.set("shipping_address_collection[allowed_countries][2]", "CH");
-    params.set("shipping_address_collection[allowed_countries][3]", "LU");
-    params.set("phone_number_collection[enabled]", "true");
     orderItems.forEach((item, index) => {
       params.set(`line_items[${index}][price_data][currency]`, "eur");
       params.set(
@@ -117,7 +136,12 @@ Deno.serve(async (request) => {
 
     await adminClient
       .from("orders")
-      .update({ stripe_session_id: session.id })
+      .update({
+        stripe_session_id: session.id,
+        shipping,
+        delivery_method: delivery.method ?? null,
+        billing,
+      })
       .eq("id", orderId);
     return json({ url: session.url, orderId });
   } catch {

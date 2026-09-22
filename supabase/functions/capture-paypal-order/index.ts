@@ -67,22 +67,9 @@ Deno.serve(async (request) => {
       return json({ error: "PAYPAL_CAPTURE_FAILED" }, 502);
     }
 
-    const shippingInfo = captureResult.purchase_units?.[0]?.shipping;
-    const shipping = shippingInfo
-      ? {
-          name: shippingInfo.name?.full_name ?? null,
-          line1: shippingInfo.address?.address_line_1 ?? null,
-          line2: shippingInfo.address?.address_line_2 ?? null,
-          city: shippingInfo.address?.admin_area_2 ?? null,
-          postalCode: shippingInfo.address?.postal_code ?? null,
-          country: shippingInfo.address?.country_code ?? null,
-          phone: null,
-        }
-      : null;
-
     const { error: updateError } = await adminClient
       .from("orders")
-      .update({ status: "paid", shipping })
+      .update({ status: "paid" })
       .eq("id", order.id);
     if (updateError) {
       console.error("ORDER_STATUS_UPDATE_FAILED", updateError);

@@ -47,6 +47,8 @@ create table if not exists public.orders (
 alter table public.orders add column if not exists stripe_session_id text unique;
 alter table public.orders add column if not exists paypal_order_id text unique;
 alter table public.orders add column if not exists shipping jsonb;
+alter table public.orders add column if not exists delivery_method text check (delivery_method in ('home', 'relay'));
+alter table public.orders add column if not exists billing jsonb;
 
 create table if not exists public.newsletter_subscribers (
   id uuid primary key default gen_random_uuid(),

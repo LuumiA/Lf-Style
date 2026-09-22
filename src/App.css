@@ -1047,6 +1047,77 @@ h2 {
   color: var(--ink-faint);
   font-size: 10px;
 }
+.delivery-step {
+  display: grid;
+  gap: 14px;
+}
+.back-link {
+  justify-self: flex-start;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-dim);
+  font-size: 11px;
+}
+.back-link:hover {
+  color: var(--gold-bright);
+}
+.delivery-step label {
+  display: grid;
+  gap: 6px;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+.delivery-step label input:not([type="checkbox"]):not([type="radio"]) {
+  border: 0;
+  border-bottom: 1px solid var(--line-strong);
+  background: transparent;
+  outline: 0;
+  padding: 8px 0;
+  color: var(--ink);
+  font:
+    12px "Manrope",
+    sans-serif;
+  text-transform: none;
+  letter-spacing: normal;
+}
+.delivery-step > div.delivery-method-choice {
+  display: flex;
+  gap: 20px;
+}
+.delivery-method-choice label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.delivery-step label.checkbox-label {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  text-transform: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.delivery-step > div.address-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+.delivery-step > div:last-of-type {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  color: var(--ink);
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
 .checkout-button {
   width: 100%;
   margin-top: 20px;

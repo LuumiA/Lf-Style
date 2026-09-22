@@ -42,6 +42,8 @@ type Order = {
   total: number;
   createdAt: string;
   shipping?: ShippingAddress | null;
+  billing?: ShippingAddress | null;
+  deliveryMethod?: string | null;
   items: {
     productId: string;
     productName: string;
@@ -136,6 +138,31 @@ function App() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [checkoutStep, setCheckoutStep] = useState<"cart" | "delivery">(
+    "cart",
+  );
+  const [deliveryMethod, setDeliveryMethod] = useState<"home" | "relay">(
+    "home",
+  );
+  const [deliveryError, setDeliveryError] = useState("");
+  const [shippingForm, setShippingForm] = useState({
+    fullName: "",
+    phone: "",
+    relayName: "",
+    line1: "",
+    line2: "",
+    postalCode: "",
+    city: "",
+    country: "France",
+  });
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true);
+  const [billingForm, setBillingForm] = useState({
+    line1: "",
+    line2: "",
+    postalCode: "",
+    city: "",
+    country: "France",
+  });
   const [modal, setModal] = useState<
     | "login"
     | "signup"
@@ -329,6 +356,13 @@ function App() {
   }, [cart, userId]);
 
   useEffect(() => {
+    if (!isCartOpen) {
+      setCheckoutStep("cart");
+      setDeliveryError("");
+    }
+  }, [isCartOpen]);
+
+  useEffect(() => {
     const elements = document.querySelectorAll(".reveal:not(.is-visible)");
     const observer = new IntersectionObserver(
       (entries) => {
@@ -354,7 +388,7 @@ function App() {
       const { data } = await supabase
         .from("orders")
         .select(
-          "id, status, total, created_at, shipping, order_items(product_id, product_name, unit_price, quantity, size, color)",
+          "id, status, total, created_at, shipping, billing, delivery_method, order_items(product_id, product_name, unit_price, quantity, size, color)",
         )
         .order("created_at", { ascending: false });
       if (data)
@@ -365,6 +399,8 @@ function App() {
             total: Number(order.total),
             createdAt: order.created_at,
             shipping: order.shipping ?? null,
+            billing: order.billing ?? null,
+            deliveryMethod: order.delivery_method ?? null,
             items: order.order_items.map((item) => ({
               productId: item.product_id,
               productName: item.product_name,
@@ -820,11 +856,61 @@ function App() {
     0,
   );
 
+  const validateDelivery = () => {
+    if (!shippingForm.fullName.trim() || !shippingForm.phone.trim()) {
+      setDeliveryError("Renseignez votre nom et votre téléphone.");
+      return false;
+    }
+    if (deliveryMethod === "relay" && !shippingForm.relayName.trim()) {
+      setDeliveryError("Indiquez le nom du point relais choisi.");
+      return false;
+    }
+    if (
+      !shippingForm.line1.trim() ||
+      !shippingForm.postalCode.trim() ||
+      !shippingForm.city.trim()
+    ) {
+      setDeliveryError(
+        deliveryMethod === "relay"
+          ? "Renseignez l'adresse complète du point relais."
+          : "Renseignez votre adresse complète.",
+      );
+      return false;
+    }
+    if (
+      !billingSameAsShipping &&
+      (!billingForm.line1.trim() ||
+        !billingForm.postalCode.trim() ||
+        !billingForm.city.trim())
+    ) {
+      setDeliveryError("Renseignez l'adresse de facturation complète.");
+      return false;
+    }
+    setDeliveryError("");
+    return true;
+  };
+
+  const buildDeliveryPayload = () => ({
+    delivery: {
+      method: deliveryMethod,
+      fullName: shippingForm.fullName,
+      phone: shippingForm.phone,
+      relayName: deliveryMethod === "relay" ? shippingForm.relayName : null,
+      line1: shippingForm.line1,
+      line2: shippingForm.line2,
+      postalCode: shippingForm.postalCode,
+      city: shippingForm.city,
+      country: shippingForm.country,
+    },
+    billing: billingSameAsShipping ? null : billingForm,
+  });
+
   const startCheckout = async () => {
     if (!userId) {
       setModal("login");
       return;
     }
+    if (!validateDelivery()) return;
     setOrderMessage("");
     const { data, error } = await supabase.functions.invoke(
       "create-checkout-session",
@@ -836,6 +922,7 @@ function App() {
             size: item.size,
             color: item.color,
           })),
+          ...buildDeliveryPayload(),
         },
       },
     );
@@ -857,6 +944,7 @@ function App() {
       setModal("login");
       return;
     }
+    if (!validateDelivery()) return;
     setOrderMessage("");
     const { data, error } = await supabase.functions.invoke(
       "create-paypal-order",
@@ -868,6 +956,7 @@ function App() {
             size: item.size,
             color: item.color,
           })),
+          ...buildDeliveryPayload(),
         },
       },
     );
@@ -1445,7 +1534,12 @@ function App() {
               </div>
             ) : (
               <>
-                <div className="cart-items">
+                <div
+                  className="cart-items"
+                  style={{
+                    display: checkoutStep === "cart" ? undefined : "none",
+                  }}
+                >
                   {cart.map((item, index) => (
                     <div
                       className="cart-item"
@@ -1484,39 +1578,281 @@ function App() {
                     </div>
                   ))}
                 </div>
-                <div className="cart-summary">
-                  <div>
-                    <span>Sous-total</span>
-                    <strong>{cartTotal}€</strong>
+                {checkoutStep === "cart" ? (
+                  <div className="cart-summary">
+                    <div>
+                      <span>Sous-total</span>
+                      <strong>{cartTotal}€</strong>
+                    </div>
+                    <small>Livraison calculée à l'étape suivante</small>
+                    <button
+                      className="button button-dark checkout-button"
+                      onClick={() => {
+                        if (!userId) {
+                          setModal("login");
+                          return;
+                        }
+                        setCheckoutStep("delivery");
+                      }}
+                    >
+                      Continuer vers la livraison <span>↗</span>
+                    </button>
                   </div>
-                  <small>Livraison calculée au paiement</small>
-                  <button
-                    className="button button-dark checkout-button"
-                    disabled={orderSaved}
-                    onClick={() => void startCheckout()}
-                  >
-                    {orderSaved
-                      ? "Redirection vers le paiement"
-                      : "Payer par carte"}{" "}
-                    <span>↗</span>
-                  </button>
-                  <button
-                    className="button button-paypal checkout-button"
-                    disabled={orderSaved}
-                    onClick={() => void startPaypalCheckout()}
-                  >
-                    {orderSaved
-                      ? "Redirection vers le paiement"
-                      : "Payer avec PayPal"}{" "}
-                    <span>↗</span>
-                  </button>
-                  {orderMessage && (
-                    <p className="payment-note">{orderMessage}</p>
-                  )}
-                  <p className="payment-note">
-                    Paiement sécurisé par carte bancaire ou PayPal
-                  </p>
-                </div>
+                ) : (
+                  <div className="cart-summary delivery-step">
+                    <button
+                      type="button"
+                      className="back-link"
+                      onClick={() => setCheckoutStep("cart")}
+                    >
+                      ← Retour au panier
+                    </button>
+                    <div className="delivery-method-choice">
+                      <label>
+                        <input
+                          type="radio"
+                          name="deliveryMethod"
+                          checked={deliveryMethod === "home"}
+                          onChange={() => setDeliveryMethod("home")}
+                        />
+                        Livraison à domicile
+                      </label>
+                      <label>
+                        <input
+                          type="radio"
+                          name="deliveryMethod"
+                          checked={deliveryMethod === "relay"}
+                          onChange={() => setDeliveryMethod("relay")}
+                        />
+                        Point relais
+                      </label>
+                    </div>
+                    <label>
+                      Nom complet
+                      <input
+                        value={shippingForm.fullName}
+                        onChange={(event) =>
+                          setShippingForm((current) => ({
+                            ...current,
+                            fullName: event.target.value,
+                          }))
+                        }
+                        placeholder="Prénom et nom"
+                      />
+                    </label>
+                    <label>
+                      Téléphone
+                      <input
+                        value={shippingForm.phone}
+                        onChange={(event) =>
+                          setShippingForm((current) => ({
+                            ...current,
+                            phone: event.target.value,
+                          }))
+                        }
+                        placeholder="06 12 34 56 78"
+                      />
+                    </label>
+                    {deliveryMethod === "relay" && (
+                      <label>
+                        Nom du point relais
+                        <input
+                          value={shippingForm.relayName}
+                          onChange={(event) =>
+                            setShippingForm((current) => ({
+                              ...current,
+                              relayName: event.target.value,
+                            }))
+                          }
+                          placeholder="Ex. Relais Colis - Tabac du Centre"
+                        />
+                      </label>
+                    )}
+                    <label>
+                      {deliveryMethod === "relay"
+                        ? "Adresse du point relais"
+                        : "Adresse"}
+                      <input
+                        value={shippingForm.line1}
+                        onChange={(event) =>
+                          setShippingForm((current) => ({
+                            ...current,
+                            line1: event.target.value,
+                          }))
+                        }
+                        placeholder="Numéro et rue"
+                      />
+                    </label>
+                    {deliveryMethod === "home" && (
+                      <label>
+                        Complément d'adresse
+                        <input
+                          value={shippingForm.line2}
+                          onChange={(event) =>
+                            setShippingForm((current) => ({
+                              ...current,
+                              line2: event.target.value,
+                            }))
+                          }
+                          placeholder="Bâtiment, étage... (facultatif)"
+                        />
+                      </label>
+                    )}
+                    <div className="address-row">
+                      <label>
+                        Code postal
+                        <input
+                          value={shippingForm.postalCode}
+                          onChange={(event) =>
+                            setShippingForm((current) => ({
+                              ...current,
+                              postalCode: event.target.value,
+                            }))
+                          }
+                          placeholder="75000"
+                        />
+                      </label>
+                      <label>
+                        Ville
+                        <input
+                          value={shippingForm.city}
+                          onChange={(event) =>
+                            setShippingForm((current) => ({
+                              ...current,
+                              city: event.target.value,
+                            }))
+                          }
+                          placeholder="Paris"
+                        />
+                      </label>
+                    </div>
+                    <label>
+                      Pays
+                      <input
+                        value={shippingForm.country}
+                        onChange={(event) =>
+                          setShippingForm((current) => ({
+                            ...current,
+                            country: event.target.value,
+                          }))
+                        }
+                      />
+                    </label>
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={billingSameAsShipping}
+                        onChange={(event) =>
+                          setBillingSameAsShipping(event.target.checked)
+                        }
+                      />
+                      L'adresse de facturation est la même
+                    </label>
+                    {!billingSameAsShipping && (
+                      <>
+                        <label>
+                          Adresse de facturation
+                          <input
+                            value={billingForm.line1}
+                            onChange={(event) =>
+                              setBillingForm((current) => ({
+                                ...current,
+                                line1: event.target.value,
+                              }))
+                            }
+                            placeholder="Numéro et rue"
+                          />
+                        </label>
+                        <label>
+                          Complément d'adresse
+                          <input
+                            value={billingForm.line2}
+                            onChange={(event) =>
+                              setBillingForm((current) => ({
+                                ...current,
+                                line2: event.target.value,
+                              }))
+                            }
+                            placeholder="Facultatif"
+                          />
+                        </label>
+                        <div className="address-row">
+                          <label>
+                            Code postal
+                            <input
+                              value={billingForm.postalCode}
+                              onChange={(event) =>
+                                setBillingForm((current) => ({
+                                  ...current,
+                                  postalCode: event.target.value,
+                                }))
+                              }
+                              placeholder="75000"
+                            />
+                          </label>
+                          <label>
+                            Ville
+                            <input
+                              value={billingForm.city}
+                              onChange={(event) =>
+                                setBillingForm((current) => ({
+                                  ...current,
+                                  city: event.target.value,
+                                }))
+                              }
+                              placeholder="Paris"
+                            />
+                          </label>
+                        </div>
+                        <label>
+                          Pays
+                          <input
+                            value={billingForm.country}
+                            onChange={(event) =>
+                              setBillingForm((current) => ({
+                                ...current,
+                                country: event.target.value,
+                              }))
+                            }
+                          />
+                        </label>
+                      </>
+                    )}
+                    {deliveryError && (
+                      <p className="form-error">{deliveryError}</p>
+                    )}
+                    <div>
+                      <span>Sous-total</span>
+                      <strong>{cartTotal}€</strong>
+                    </div>
+                    <button
+                      className="button button-dark checkout-button"
+                      disabled={orderSaved}
+                      onClick={() => void startCheckout()}
+                    >
+                      {orderSaved
+                        ? "Redirection vers le paiement"
+                        : "Payer par carte"}{" "}
+                      <span>↗</span>
+                    </button>
+                    <button
+                      className="button button-paypal checkout-button"
+                      disabled={orderSaved}
+                      onClick={() => void startPaypalCheckout()}
+                    >
+                      {orderSaved
+                        ? "Redirection vers le paiement"
+                        : "Payer avec PayPal"}{" "}
+                      <span>↗</span>
+                    </button>
+                    {orderMessage && (
+                      <p className="payment-note">{orderMessage}</p>
+                    )}
+                    <p className="payment-note">
+                      Paiement sécurisé par carte bancaire ou PayPal
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </aside>
@@ -1893,6 +2229,12 @@ function App() {
                           </small>
                           {order.shipping ? (
                             <small className="admin-order-address">
+                              <strong>
+                                {order.deliveryMethod === "relay"
+                                  ? "Point relais"
+                                  : "Livraison à domicile"}
+                              </strong>
+                              <br />
                               {order.shipping.name}
                               <br />
                               {order.shipping.line1}
@@ -1913,6 +2255,19 @@ function App() {
                                 Adresse non renseignée
                               </small>
                             )
+                          )}
+                          {order.billing && (
+                            <small className="admin-order-address">
+                              <strong>Facturation</strong>
+                              <br />
+                              {order.billing.line1}
+                              {order.billing.line2
+                                ? `, ${order.billing.line2}`
+                                : ""}
+                              <br />
+                              {order.billing.postalCode}{" "}
+                              {order.billing.city} · {order.billing.country}
+                            </small>
                           )}
                         </div>
                         <div className="order-actions">
