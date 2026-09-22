@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import { faBasketShopping } from "@fortawesome/free-solid-svg-icons";
 import "./App.css";
@@ -41,28 +41,11 @@ type Order = {
   }[];
 };
 
-const categories = [
-  {
-    name: "Robes",
-    image:
-      "https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?auto=format&fit=crop&w=700&q=85",
-  },
-  {
-    name: "T-shirts",
-    image:
-      "https://images.unsplash.com/photo-1529139574466-a303027c1d8b?auto=format&fit=crop&w=700&q=85",
-  },
-  {
-    name: "Sacs",
-    image:
-      "https://images.unsplash.com/photo-1566150905458-1bf1fc113f0d?auto=format&fit=crop&w=700&q=85",
-  },
-  {
-    name: "Pantalons",
-    image:
-      "https://images.unsplash.com/photo-1584370848010-d7fe6bc767ec?auto=format&fit=crop&w=700&q=85",
-  },
-];
+type Category = {
+  id: string;
+  name: string;
+  image: string;
+};
 
 const normalizeSearch = (value: string) =>
   value
@@ -80,11 +63,68 @@ const orderStatusLabels: Record<string, string> = {
   cancelled: "Annulée",
 };
 
+const tickerItems = [
+  {
+    index: "01",
+    label: "Petites séries",
+    detail: "Des pièces qui ne courent pas les rues",
+  },
+  {
+    index: "02",
+    label: "Choisi avec soin",
+    detail: "Des matières qui durent",
+  },
+  {
+    index: "03",
+    label: "Expédition rapide",
+    detail: "Préparé avec attention",
+  },
+];
+
+function CustomCursor() {
+  const cursorRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const cursor = cursorRef.current;
+    if (!cursor) return;
+    const interactiveSelector = "a, button, input, select, textarea";
+    const move = (event: MouseEvent) => {
+      cursor.style.setProperty("--cx", `${event.clientX}px`);
+      cursor.style.setProperty("--cy", `${event.clientY}px`);
+      cursor.classList.add("is-active");
+    };
+    const over = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest(interactiveSelector)) {
+        cursor.classList.add("is-hovering");
+      }
+    };
+    const out = (event: MouseEvent) => {
+      if ((event.target as HTMLElement).closest(interactiveSelector)) {
+        cursor.classList.remove("is-hovering");
+      }
+    };
+    const leave = () => cursor.classList.remove("is-active");
+    window.addEventListener("mousemove", move);
+    window.addEventListener("mouseover", over);
+    window.addEventListener("mouseout", out);
+    window.addEventListener("mouseleave", leave);
+    return () => {
+      window.removeEventListener("mousemove", move);
+      window.removeEventListener("mouseover", over);
+      window.removeEventListener("mouseout", out);
+      window.removeEventListener("mouseleave", leave);
+    };
+  }, []);
+
+  return <div className="custom-cursor" ref={cursorRef} />;
+}
+
 function App() {
   const [activeCategory, setActiveCategory] = useState("Tout voir");
   const [search, setSearch] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [modal, setModal] = useState<
     | "login"
     | "signup"
@@ -92,6 +132,7 @@ function App() {
     | "product"
     | "account"
     | "admin"
+    | "categories"
     | "orders"
     | "order-success"
     | null
@@ -108,6 +149,7 @@ function App() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersRefreshKey, setOrdersRefreshKey] = useState(0);
   const [catalog, setCatalog] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<Category[]>([]);
   const [authError, setAuthError] = useState("");
   const [authMessage, setAuthMessage] = useState("");
   const [adminMessage, setAdminMessage] = useState("");
@@ -168,6 +210,22 @@ function App() {
       }
     };
 
+    const loadCategories = async () => {
+      const { data, error } = await supabase
+        .from("categories")
+        .select("id, name, image_url")
+        .order("created_at", { ascending: true });
+      if (!error && data) {
+        setCategories(
+          data.map((category) => ({
+            id: category.id,
+            name: category.name,
+            image: category.image_url,
+          })),
+        );
+      }
+    };
+
     const loadSession = async () => {
       const { data } = await supabase.auth.getSession();
       setUserId(data.session?.user.id ?? null);
@@ -175,6 +233,7 @@ function App() {
     };
 
     void loadCatalog();
+    void loadCategories();
     void loadSession();
 
     const { data: listener } = supabase.auth.onAuthStateChange(
@@ -252,6 +311,23 @@ function App() {
     const storageKey = `lf-style-cart-${userId ?? "guest"}`;
     localStorage.setItem(storageKey, JSON.stringify(cart));
   }, [cart, userId]);
+
+  useEffect(() => {
+    const elements = document.querySelectorAll(".reveal:not(.is-visible)");
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add("is-visible");
+            observer.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.15 },
+    );
+    elements.forEach((element) => observer.observe(element));
+    return () => observer.disconnect();
+  }, [catalog.length, categories.length]);
 
   useEffect(() => {
     if (!userId) {
@@ -545,6 +621,97 @@ function App() {
     );
   };
 
+  const addCategory = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setAdminMessage("");
+    const form = new FormData(event.currentTarget);
+    const name = String(form.get("name")).trim();
+    const imageFile = form.get("image") as File | null;
+    if (!name) {
+      setAdminMessage("Donnez un nom à la catégorie.");
+      return;
+    }
+    if (!imageFile || imageFile.size === 0) {
+      setAdminMessage("Choisissez une image pour la catégorie.");
+      return;
+    }
+    if (!imageFile.type.startsWith("image/")) {
+      setAdminMessage("Le fichier choisi doit être une image.");
+      return;
+    }
+    if (imageFile.size > 5 * 1024 * 1024) {
+      setAdminMessage("L'image ne doit pas dépasser 5 Mo.");
+      return;
+    }
+
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) {
+      setAdminMessage("Votre session a expiré. Reconnectez-vous.");
+      return;
+    }
+
+    const safeFileName = imageFile.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const imagePath = `categories/${userData.user.id}/${Date.now()}-${safeFileName}`;
+    const { error: uploadError } = await supabase.storage
+      .from("product-images")
+      .upload(imagePath, imageFile, { contentType: imageFile.type });
+    if (uploadError) {
+      setAdminMessage("Impossible d'envoyer cette image dans Supabase.");
+      return;
+    }
+
+    const { data: publicImage } = supabase.storage
+      .from("product-images")
+      .getPublicUrl(imagePath);
+    const { data, error } = await supabase
+      .from("categories")
+      .insert({ name, image_url: publicImage.publicUrl })
+      .select("id, name, image_url")
+      .single();
+    if (error) {
+      await supabase.storage.from("product-images").remove([imagePath]);
+      setAdminMessage(
+        error.message.includes("duplicate")
+          ? "Cette catégorie existe déjà."
+          : "Impossible d'ajouter cette catégorie.",
+      );
+      return;
+    }
+    setCategories((current) => [
+      ...current,
+      { id: data.id, name: data.name, image: data.image_url },
+    ]);
+    setAdminMessage("Catégorie ajoutée.");
+    event.currentTarget.reset();
+  };
+
+  const removeCategory = async (category: Category) => {
+    if (
+      !window.confirm(
+        `Supprimer la catégorie « ${category.name} » ? Les articles existants garderont ce nom de catégorie mais elle disparaîtra des filtres et de la page d'accueil.`,
+      )
+    )
+      return;
+    const { error } = await supabase
+      .from("categories")
+      .delete()
+      .eq("id", category.id);
+    if (error) {
+      setAdminMessage("Impossible de supprimer cette catégorie.");
+      return;
+    }
+    const imagePath = category.image.split("/product-images/")[1];
+    if (imagePath) {
+      await supabase.storage
+        .from("product-images")
+        .remove([decodeURIComponent(imagePath)]);
+    }
+    setCategories((current) =>
+      current.filter((item) => item.id !== category.id),
+    );
+    setAdminMessage(`« ${category.name} » a été supprimée.`);
+  };
+
   const addToCart = (
     product: Product,
     quantity = 1,
@@ -778,6 +945,7 @@ function App() {
 
   return (
     <div className="site-shell">
+      <CustomCursor />
       {cartNotice && (
         <div className="cart-toast" role="status">
           {cartNotice}
@@ -787,8 +955,13 @@ function App() {
         Livraison offerte dès 100€ <span>·</span> Retours sous 14 jours
       </div>
       <header className="header">
-        <button className="mobile-menu" aria-label="Ouvrir le menu">
-          ☰
+        <button
+          className="mobile-menu"
+          aria-label={isMobileMenuOpen ? "Fermer le menu" : "Ouvrir le menu"}
+          aria-expanded={isMobileMenuOpen}
+          onClick={() => setIsMobileMenuOpen((open) => !open)}
+        >
+          {isMobileMenuOpen ? "×" : "☰"}
         </button>
         <a className="brand" href="#top">
           LF-Style<span>.</span>
@@ -798,6 +971,19 @@ function App() {
           <a href="#shop">La collection</a>
           <a href="#categories">Catégories</a>
         </nav>
+        {isMobileMenuOpen && (
+          <nav className="mobile-nav" aria-label="Navigation mobile">
+            <a href="#nouveautes" onClick={() => setIsMobileMenuOpen(false)}>
+              Nouveautés
+            </a>
+            <a href="#shop" onClick={() => setIsMobileMenuOpen(false)}>
+              La collection
+            </a>
+            <a href="#categories" onClick={() => setIsMobileMenuOpen(false)}>
+              Catégories
+            </a>
+          </nav>
+        )}
         <div className="header-actions">
           <label className="search-box">
             <span>⌕</span>
@@ -848,6 +1034,16 @@ function App() {
                     Catalogue admin
                   </button>
                 )}
+                {isAdmin && (
+                  <button
+                    onClick={() => {
+                      setIsAccountMenuOpen(false);
+                      setModal("categories");
+                    }}
+                  >
+                    Catégories
+                  </button>
+                )}
                 <button onClick={() => void signOut()}>Se déconnecter</button>
               </div>
             )}
@@ -864,6 +1060,17 @@ function App() {
 
       <main id="top">
         <section className="hero" id="nouveautes">
+          <div className="hero-image">
+            <img
+              src="https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1300&q=90"
+              alt="Sélection de vêtements LF-Style"
+            />
+            <div className="hero-sticker">
+              LF-Style
+              <br />
+              <small>est. 2024</small>
+            </div>
+          </div>
           <div className="hero-copy">
             <p className="eyebrow">Collection automne / hiver 2024</p>
             <h1>
@@ -879,43 +1086,23 @@ function App() {
               Découvrir la collection <span>↗</span>
             </a>
           </div>
-          <div className="hero-image">
-            <img
-              src="https://images.unsplash.com/photo-1483985988355-763728e1935b?auto=format&fit=crop&w=1300&q=90"
-              alt="Sélection de vêtements LF-Style"
-            />
-            <div className="hero-sticker">
-              LF-Style
-              <br />
-              <small>est. 2024</small>
-            </div>
+          <div className="hero-edge-label">
+            <span>Collection Automne — Hiver 2024</span>
           </div>
         </section>
 
-        <section className="trust-bar">
-          <div>
-            <strong>01</strong>
-            <span>
-              Petites séries
-              <br />
-              <small>Des pièces qui ne courent pas les rues</small>
-            </span>
-          </div>
-          <div>
-            <strong>02</strong>
-            <span>
-              Choisi avec soin
-              <br />
-              <small>Des matières qui durent</small>
-            </span>
-          </div>
-          <div>
-            <strong>03</strong>
-            <span>
-              Expédition rapide
-              <br />
-              <small>Préparé avec attention</small>
-            </span>
+        <section className="marquee">
+          <div className="marquee-track">
+            {[0, 1].map((loop) =>
+              tickerItems.map((item) => (
+                <div className="marquee-item" key={`${loop}-${item.index}`}>
+                  <strong>{item.index}</strong>
+                  <span>{item.label}</span>
+                  <i>·</i>
+                  <small>{item.detail}</small>
+                </div>
+              )),
+            )}
           </div>
         </section>
 
@@ -929,11 +1116,11 @@ function App() {
               Voir toutes les catégories ↗
             </a>
           </div>
-          <div className="category-grid">
+          <div className="category-grid reveal">
             {categories.map((category) => (
               <button
                 className="category-card"
-                key={category.name}
+                key={category.id}
                 onClick={() => {
                   setActiveCategory(category.name);
                   document
@@ -971,20 +1158,27 @@ function App() {
               >
                 Tout voir
               </button>
-              {["Robes", "Pulls", "Sacs", "Pantalons"].map((category) => (
+              {categories.map((category) => (
                 <button
-                  className={activeCategory === category ? "active" : ""}
-                  key={category}
-                  onClick={() => setActiveCategory(category)}
+                  className={activeCategory === category.name ? "active" : ""}
+                  key={category.id}
+                  onClick={() => setActiveCategory(category.name)}
                 >
-                  {category}
+                  {category.name}
                 </button>
               ))}
             </div>
           </div>
           <div className="product-grid">
-            {filteredProducts.map((product) => (
-              <article className="product-card" key={product.id}>
+            {filteredProducts.map((product, index) => (
+              <article
+                className="product-card reveal"
+                key={product.id}
+                style={{ transitionDelay: `${(index % 4) * 90}ms` }}
+              >
+                <span className="product-index">
+                  {String(index + 1).padStart(2, "0")}
+                </span>
                 <div className="product-image">
                   <img src={product.image} alt={product.name} />
                   {product.tag && (
@@ -1067,13 +1261,13 @@ function App() {
         </section>
 
         <section className="editorial">
-          <div className="editorial-image">
+          <div className="editorial-image reveal">
             <img
               src="https://images.unsplash.com/photo-1485968579580-b6d095142e6e?auto=format&fit=crop&w=1100&q=85"
               alt="Détails d'une tenue LF-Style"
             />
           </div>
-          <div className="editorial-copy">
+          <div className="editorial-copy reveal">
             <p className="eyebrow">LF-Style, en quelques mots</p>
             <h2>
               Des vêtements
@@ -1218,7 +1412,10 @@ function App() {
                             +
                           </button>
                         </div>
-                        <button onClick={() => removeFromCart(index)}>
+                        <button
+                          className="remove-item"
+                          onClick={() => removeFromCart(index)}
+                        >
                           Retirer
                         </button>
                       </div>
@@ -1667,6 +1864,55 @@ function App() {
                   )}
                 </div>
               </>
+            ) : modal === "categories" ? (
+              <>
+                <p className="eyebrow">Gestion de la boutique</p>
+                <h2>Catégories</h2>
+                <p className="modal-intro">
+                  Ajoutez une catégorie avec sa photo de couverture, ou
+                  supprimez celles qui ne sont plus utilisées.
+                </p>
+                <div className="category-manage-list">
+                  {categories.length === 0 ? (
+                    <p className="admin-empty">
+                      Aucune catégorie pour le moment.
+                    </p>
+                  ) : (
+                    categories.map((category) => (
+                      <div className="category-manage-item" key={category.id}>
+                        <img src={category.image} alt={category.name} />
+                        <span>{category.name}</span>
+                        <button
+                          className="delete-order"
+                          onClick={() => void removeCategory(category)}
+                          aria-label={`Supprimer ${category.name}`}
+                        >
+                          Supprimer
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+                <form onSubmit={addCategory}>
+                  <label>
+                    Nom de la catégorie
+                    <input name="name" required placeholder="Ex. Vestes" />
+                  </label>
+                  <label>
+                    Photo de couverture
+                    <input
+                      name="image"
+                      type="file"
+                      accept="image/png,image/jpeg,image/webp"
+                      required
+                    />
+                  </label>
+                  <button className="button button-dark full-button">
+                    Ajouter la catégorie <span>+</span>
+                  </button>
+                </form>
+                {adminMessage && <p className="form-success">{adminMessage}</p>}
+              </>
             ) : (
               <>
                 <p className="eyebrow">Gestion de la boutique</p>
@@ -1705,12 +1951,13 @@ function App() {
                     Catégorie
                     <select
                       name="category"
-                      defaultValue={editingProduct?.category || "Robes"}
+                      defaultValue={
+                        editingProduct?.category || categories[0]?.name
+                      }
                     >
-                      <option>Robes</option>
-                      <option>Pulls</option>
-                      <option>Sacs</option>
-                      <option>Pantalons</option>
+                      {categories.map((category) => (
+                        <option key={category.id}>{category.name}</option>
+                      ))}
                     </select>
                   </label>
                   <label>
