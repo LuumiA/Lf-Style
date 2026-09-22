@@ -80,6 +80,11 @@ Deno.serve(async (request) => {
     params.set("cancel_url", `${siteUrl}/?payment=cancelled`);
     params.set("customer_email", userData.user.email ?? "");
     params.set("metadata[order_id]", orderId);
+    params.set("shipping_address_collection[allowed_countries][0]", "FR");
+    params.set("shipping_address_collection[allowed_countries][1]", "BE");
+    params.set("shipping_address_collection[allowed_countries][2]", "CH");
+    params.set("shipping_address_collection[allowed_countries][3]", "LU");
+    params.set("phone_number_collection[enabled]", "true");
     orderItems.forEach((item, index) => {
       params.set(`line_items[${index}][price_data][currency]`, "eur");
       params.set(

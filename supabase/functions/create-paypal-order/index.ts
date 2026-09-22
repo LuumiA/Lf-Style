@@ -109,7 +109,7 @@ Deno.serve(async (request) => {
         ],
         application_context: {
           brand_name: "LF-Style",
-          shipping_preference: "NO_SHIPPING",
+          shipping_preference: "GET_FROM_FILE",
           user_action: "PAY_NOW",
           return_url: `${siteUrl}/?paypal=return&order_id=${orderId}`,
           cancel_url: `${siteUrl}/?payment=cancelled`,

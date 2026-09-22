@@ -850,6 +850,32 @@ h2 {
   align-items: center;
   gap: 24px;
 }
+.footer-legal {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 36px;
+  padding-top: 24px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.footer-legal button {
+  border: 0;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-faint);
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+.footer-legal button:hover {
+  color: var(--gold-bright);
+}
 .footer .brand {
   font-size: 24px;
 }
@@ -1065,6 +1091,52 @@ h2 {
   max-height: calc(100vh - 40px);
   overflow-y: auto;
 }
+.modal-wide {
+  width: min(680px, 100%);
+}
+.legal-tabs {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+.legal-tabs button {
+  border: 1px solid var(--line-strong);
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--ink-dim);
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.legal-tabs button.active {
+  border-color: var(--gold);
+  color: var(--gold-bright);
+}
+.legal-content {
+  color: var(--ink-dim);
+  font-size: 12px;
+  line-height: 1.8;
+}
+.legal-content h3 {
+  color: var(--ink);
+  font-size: 15px;
+  margin: 26px 0 10px;
+}
+.legal-content h3:first-child {
+  margin-top: 0;
+}
+.legal-content p {
+  margin: 0 0 12px;
+  color: var(--ink-dim);
+}
+.legal-content ul {
+  margin: 0 0 12px;
+  padding-left: 18px;
+}
+.legal-content strong {
+  color: var(--ink);
+}
 @keyframes modal-in {
   from {
     opacity: 0;
@@ -1273,7 +1345,7 @@ h2 {
 }
 .admin-order {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   border-bottom: 1px solid var(--line);
@@ -1292,6 +1364,13 @@ h2 {
 .admin-order small {
   color: var(--ink-faint);
   font-size: 10px;
+}
+.admin-order-address {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+  color: var(--ink-dim);
+  line-height: 1.6;
 }
 .order-actions {
   display: flex;

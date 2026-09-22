@@ -56,9 +56,22 @@ Deno.serve(async (request) => {
         Deno.env.get("SUPABASE_URL")!,
         Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
       );
+      const shippingDetails = event.data.object.shipping_details;
+      const shipping = shippingDetails
+        ? {
+            name: shippingDetails.name ?? null,
+            line1: shippingDetails.address?.line1 ?? null,
+            line2: shippingDetails.address?.line2 ?? null,
+            city: shippingDetails.address?.city ?? null,
+            postalCode: shippingDetails.address?.postal_code ?? null,
+            country: shippingDetails.address?.country ?? null,
+            phone: event.data.object.customer_details?.phone ?? null,
+          }
+        : null;
+
       const { error: updateError } = await supabase
         .from("orders")
-        .update({ status: "paid" })
+        .update({ status: "paid", shipping })
         .eq("id", orderId);
       if (updateError) console.error("ORDER_STATUS_UPDATE_FAILED", updateError);
 

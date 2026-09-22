@@ -46,6 +46,13 @@ create table if not exists public.orders (
 
 alter table public.orders add column if not exists stripe_session_id text unique;
 alter table public.orders add column if not exists paypal_order_id text unique;
+alter table public.orders add column if not exists shipping jsonb;
+
+create table if not exists public.newsletter_subscribers (
+  id uuid primary key default gen_random_uuid(),
+  email text not null unique,
+  created_at timestamptz not null default now()
+);
 
 create table if not exists public.order_items (
   id uuid primary key default gen_random_uuid(),
@@ -63,6 +70,7 @@ alter table public.products enable row level security;
 alter table public.categories enable row level security;
 alter table public.orders enable row level security;
 alter table public.order_items enable row level security;
+alter table public.newsletter_subscribers enable row level security;
 
 create or replace function public.is_admin()
 returns boolean
@@ -175,6 +183,21 @@ create policy "Users can view their order items"
 on public.order_items for select
 to authenticated
 using (exists (select 1 from public.orders where orders.id = order_id and (orders.user_id = auth.uid() or public.is_admin())));
+
+create policy "Anyone can subscribe to the newsletter"
+on public.newsletter_subscribers for insert
+to anon, authenticated
+with check (true);
+
+create policy "Admins can view newsletter subscribers"
+on public.newsletter_subscribers for select
+to authenticated
+using (public.is_admin());
+
+create policy "Admins can delete newsletter subscribers"
+on public.newsletter_subscribers for delete
+to authenticated
+using (public.is_admin());
 
 create or replace function public.cancel_order(target_order_id uuid)
 returns void

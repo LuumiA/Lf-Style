@@ -26,11 +26,22 @@ type CartItem = {
   color?: string;
 };
 
+type ShippingAddress = {
+  name?: string | null;
+  line1?: string | null;
+  line2?: string | null;
+  city?: string | null;
+  postalCode?: string | null;
+  country?: string | null;
+  phone?: string | null;
+};
+
 type Order = {
   id: string;
   status: string;
   total: number;
   createdAt: string;
+  shipping?: ShippingAddress | null;
   items: {
     productId: string;
     productName: string;
@@ -135,8 +146,12 @@ function App() {
     | "categories"
     | "orders"
     | "order-success"
+    | "legal"
     | null
   >(null);
+  const [legalTab, setLegalTab] = useState<
+    "mentions" | "cgv" | "confidentialite"
+  >("mentions");
   const [accountName, setAccountName] = useState("");
   const [isAccountMenuOpen, setIsAccountMenuOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -155,6 +170,7 @@ function App() {
   const [adminMessage, setAdminMessage] = useState("");
   const [newsletterEmail, setNewsletterEmail] = useState("");
   const [newsletterSent, setNewsletterSent] = useState(false);
+  const [newsletterError, setNewsletterError] = useState("");
 
   const filteredProducts = useMemo(
     () =>
@@ -338,7 +354,7 @@ function App() {
       const { data } = await supabase
         .from("orders")
         .select(
-          "id, status, total, created_at, order_items(product_id, product_name, unit_price, quantity, size, color)",
+          "id, status, total, created_at, shipping, order_items(product_id, product_name, unit_price, quantity, size, color)",
         )
         .order("created_at", { ascending: false });
       if (data)
@@ -348,6 +364,7 @@ function App() {
             status: order.status,
             total: Number(order.total),
             createdAt: order.created_at,
+            shipping: order.shipping ?? null,
             items: order.order_items.map((item) => ({
               productId: item.product_id,
               productName: item.product_name,
@@ -432,10 +449,26 @@ function App() {
     setModal(null);
   };
 
+  const subscribeToNewsletter = async (
+    event: React.FormEvent<HTMLFormElement>,
+  ) => {
+    event.preventDefault();
+    setNewsletterError("");
+    const { error } = await supabase
+      .from("newsletter_subscribers")
+      .insert({ email: newsletterEmail });
+    if (error && !error.message.includes("duplicate")) {
+      setNewsletterError("Impossible de vous inscrire pour le moment.");
+      return;
+    }
+    setNewsletterSent(true);
+  };
+
   const addProduct = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAdminMessage("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const imageFile = form.get("image") as File | null;
     if (!imageFile || imageFile.size === 0) {
       setAdminMessage("Choisissez une image avant d'ajouter l'article.");
@@ -519,7 +552,7 @@ function App() {
       ]);
     }
     setAdminMessage("Article ajouté au catalogue.");
-    event.currentTarget.reset();
+    formElement.reset();
   };
 
   const removeProduct = async (product: Product) => {
@@ -624,7 +657,8 @@ function App() {
   const addCategory = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setAdminMessage("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const name = String(form.get("name")).trim();
     const imageFile = form.get("image") as File | null;
     if (!name) {
@@ -682,7 +716,7 @@ function App() {
       { id: data.id, name: data.name, image: data.image_url },
     ]);
     setAdminMessage("Catégorie ajoutée.");
-    event.currentTarget.reset();
+    formElement.reset();
   };
 
   const removeCategory = async (category: Category) => {
@@ -1291,12 +1325,7 @@ function App() {
             Les nouveautés, les inspirations et les petites surprises. Pas de
             bruit, promis.
           </p>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              setNewsletterSent(true);
-            }}
-          >
+          <form onSubmit={(event) => void subscribeToNewsletter(event)}>
             <input
               type="email"
               required
@@ -1308,6 +1337,9 @@ function App() {
               {newsletterSent ? "Merci !" : "S'inscrire"} <span>↗</span>
             </button>
           </form>
+          {newsletterError && (
+            <p className="form-error">{newsletterError}</p>
+          )}
         </section>
       </main>
 
@@ -1347,6 +1379,36 @@ function App() {
           >
             TikTok
           </a>
+        </div>
+        <div className="footer-legal">
+          <span>© {new Date().getFullYear()} LF-Style</span>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalTab("mentions");
+              setModal("legal");
+            }}
+          >
+            Mentions légales
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalTab("cgv");
+              setModal("legal");
+            }}
+          >
+            CGV
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setLegalTab("confidentialite");
+              setModal("legal");
+            }}
+          >
+            Confidentialité
+          </button>
         </div>
       </footer>
 
@@ -1463,7 +1525,10 @@ function App() {
 
       {modal && (
         <div className="modal-backdrop" onClick={() => setModal(null)}>
-          <div className="modal" onClick={(event) => event.stopPropagation()}>
+          <div
+            className={modal === "legal" ? "modal modal-wide" : "modal"}
+            onClick={(event) => event.stopPropagation()}
+          >
             <button className="close-button" onClick={() => setModal(null)}>
               ×
             </button>
@@ -1557,6 +1622,12 @@ function App() {
                               "fr-FR",
                             )}
                           </small>
+                          {order.shipping?.line1 && (
+                            <small className="admin-order-address">
+                              Livré à {order.shipping.postalCode}{" "}
+                              {order.shipping.city}
+                            </small>
+                          )}
                         </div>
                         <div>
                           <strong>{order.total.toFixed(2)}€</strong>
@@ -1820,6 +1891,29 @@ function App() {
                             )}{" "}
                             · {order.total.toFixed(2)}€
                           </small>
+                          {order.shipping ? (
+                            <small className="admin-order-address">
+                              {order.shipping.name}
+                              <br />
+                              {order.shipping.line1}
+                              {order.shipping.line2
+                                ? `, ${order.shipping.line2}`
+                                : ""}
+                              <br />
+                              {order.shipping.postalCode}{" "}
+                              {order.shipping.city} ·{" "}
+                              {order.shipping.country}
+                              {order.shipping.phone
+                                ? ` · ${order.shipping.phone}`
+                                : ""}
+                            </small>
+                          ) : (
+                            order.status !== "pending" && (
+                              <small className="admin-order-address">
+                                Adresse non renseignée
+                              </small>
+                            )
+                          )}
                         </div>
                         <div className="order-actions">
                           <select
@@ -1912,6 +2006,180 @@ function App() {
                   </button>
                 </form>
                 {adminMessage && <p className="form-success">{adminMessage}</p>}
+              </>
+            ) : modal === "legal" ? (
+              <>
+                <p className="eyebrow">Informations légales</p>
+                <h2>
+                  {legalTab === "mentions"
+                    ? "Mentions légales"
+                    : legalTab === "cgv"
+                      ? "Conditions générales de vente"
+                      : "Confidentialité"}
+                </h2>
+                <div className="legal-tabs">
+                  <button
+                    className={legalTab === "mentions" ? "active" : ""}
+                    onClick={() => setLegalTab("mentions")}
+                  >
+                    Mentions légales
+                  </button>
+                  <button
+                    className={legalTab === "cgv" ? "active" : ""}
+                    onClick={() => setLegalTab("cgv")}
+                  >
+                    CGV
+                  </button>
+                  <button
+                    className={
+                      legalTab === "confidentialite" ? "active" : ""
+                    }
+                    onClick={() => setLegalTab("confidentialite")}
+                  >
+                    Confidentialité
+                  </button>
+                </div>
+                <div className="legal-content">
+                  {legalTab === "mentions" ? (
+                    <>
+                      <h3>Éditeur du site</h3>
+                      <p>
+                        LF-Style est édité par [nom ou raison sociale à
+                        compléter], [statut juridique à compléter, ex.
+                        entreprise individuelle], immatriculée sous le numéro
+                        SIRET [à compléter], dont le siège social est situé
+                        [adresse à compléter].
+                        <br />
+                        Contact : laura.loucas@hotmail.fr
+                      </p>
+                      <h3>Directeur de la publication</h3>
+                      <p>[Nom à compléter]</p>
+                      <h3>Hébergement</h3>
+                      <p>
+                        Le site est hébergé par Vercel Inc., 340 S Lemon Ave
+                        #4133, Walnut, CA 91789, États-Unis.
+                        <br />
+                        Les données (comptes, commandes, catalogue) sont
+                        hébergées par Supabase Inc.
+                      </p>
+                      <h3>Propriété intellectuelle</h3>
+                      <p>
+                        L'ensemble des contenus présents sur ce site (textes,
+                        images, logo) est protégé et ne peut être reproduit
+                        sans autorisation préalable.
+                      </p>
+                    </>
+                  ) : legalTab === "cgv" ? (
+                    <>
+                      <h3>Objet</h3>
+                      <p>
+                        Les présentes conditions régissent les ventes
+                        réalisées sur LF-Style entre l'éditeur du site et
+                        tout client effectuant un achat.
+                      </p>
+                      <h3>Prix</h3>
+                      <p>
+                        Les prix sont indiqués en euros, toutes taxes
+                        comprises. LF-Style se réserve le droit de modifier
+                        ses prix à tout moment, les articles étant facturés
+                        sur la base du tarif en vigueur au moment de la
+                        validation de la commande.
+                      </p>
+                      <h3>Commande et paiement</h3>
+                      <p>
+                        La commande est validée après paiement intégral,
+                        réalisé de façon sécurisée par carte bancaire (via
+                        Stripe) ou via PayPal. La commande n'est confirmée
+                        qu'après réception effective du paiement.
+                      </p>
+                      <h3>Livraison</h3>
+                      <p>
+                        Les articles sont expédiés à l'adresse renseignée
+                        lors du paiement. Les délais de livraison sont
+                        communiqués à titre indicatif et peuvent varier selon
+                        la destination.
+                      </p>
+                      <h3>Droit de rétractation</h3>
+                      <p>
+                        Conformément aux articles L.221-18 et suivants du
+                        Code de la consommation, le client dispose d'un délai
+                        de 14 jours à compter de la réception de sa commande
+                        pour exercer son droit de rétractation, sans avoir à
+                        justifier de motif. Les articles doivent être
+                        retournés dans leur état d'origine.
+                      </p>
+                      <h3>Retours et remboursements</h3>
+                      <p>
+                        Toute demande de retour doit être adressée via le
+                        formulaire de contact. Le remboursement intervient
+                        après réception et vérification de l'article
+                        retourné, par le même moyen de paiement que celui
+                        utilisé lors de la commande.
+                      </p>
+                      <h3>Garanties légales</h3>
+                      <p>
+                        Les articles bénéficient de la garantie légale de
+                        conformité et de la garantie contre les vices cachés,
+                        conformément au Code civil et au Code de la
+                        consommation.
+                      </p>
+                      <h3>Litiges</h3>
+                      <p>
+                        En cas de litige, le client peut recourir gratuitement
+                        à un médiateur de la consommation. À défaut d'accord
+                        amiable, les tribunaux français seront seuls
+                        compétents.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h3>Données collectées</h3>
+                      <p>
+                        Lors de la création d'un compte ou d'une commande,
+                        nous collectons : votre prénom, votre adresse e-mail,
+                        votre adresse de livraison et l'historique de vos
+                        commandes.
+                      </p>
+                      <h3>Finalités</h3>
+                      <p>
+                        Ces données servent exclusivement à la gestion de
+                        votre compte, au traitement et à l'expédition de vos
+                        commandes, ainsi qu'à l'envoi d'e-mails de
+                        confirmation.
+                      </p>
+                      <h3>Destinataires</h3>
+                      <p>
+                        Vos données sont partagées uniquement avec les
+                        prestataires nécessaires au fonctionnement du site :
+                      </p>
+                      <ul>
+                        <li>Supabase (hébergement du compte et des commandes)</li>
+                        <li>Stripe et PayPal (traitement du paiement)</li>
+                        <li>Resend (envoi des e-mails de confirmation)</li>
+                      </ul>
+                      <h3>Conservation</h3>
+                      <p>
+                        Vos données sont conservées pendant toute la durée de
+                        votre relation avec LF-Style, puis archivées
+                        conformément aux durées légales applicables en
+                        matière commerciale et fiscale.
+                      </p>
+                      <h3>Vos droits</h3>
+                      <p>
+                        Conformément au RGPD, vous disposez d'un droit
+                        d'accès, de rectification et de suppression de vos
+                        données. Pour l'exercer, contactez-nous à
+                        laura.loucas@hotmail.fr.
+                      </p>
+                      <h3>Cookies et stockage local</h3>
+                      <p>
+                        Le site utilise le stockage local de votre navigateur
+                        pour conserver le contenu de votre panier. Aucun
+                        cookie publicitaire ou de suivi tiers n'est utilisé.
+                      </p>
+                    </>
+                  )}
+                </div>
               </>
             ) : (
               <>
